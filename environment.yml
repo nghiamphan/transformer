@@ -1,0 +1,12 @@
+name: encoder-only-transformer
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.11
+  - pip
+  - pytorch
+  - sklearn
+  - optuna
+  - black
+
