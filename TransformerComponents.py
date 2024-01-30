@@ -125,6 +125,8 @@ class MultiHeadAttention(nn.Module):
         mask: torch.Tensor = None,
     ) -> torch.Tensor:
         """
+        Note: in cross attention, Q is decoder's query, K is encoder's key and V is encoder's value, and os Q and K may have differerent seq_length.
+        The product of Q and K will have dimension equal to the smaller seq_length of K and Q.
         Arguments
         ---------
         Q: torch.Tensor [batch_size, n_heads, seq_length, d_k]
@@ -325,21 +327,26 @@ class DecoderBlock(nn.Module):
     def forward(self, x, enc_output, src_mask, tgt_mask):
         """
         Arguments:
-        x: torch.Tensor [batch_size, seq_length, embed_dim]
-        enc_output: torch.Tensor [batch_size, seq_length, embed_dim]
-        src_mask: torch.Tensor [batch_size, 1, 1, seq_length]
-        tgt_mask: torch.Tensor [1, seq_length, seq_length]
+        x: torch.Tensor [batch_size, tgt_seq_length, embed_dim]
+        enc_output: torch.Tensor [batch_size, src_seq_length, embed_dim]
+        src_mask: torch.Tensor [batch_size, 1, 1, src_seq_length]
+        tgt_mask: torch.Tensor [1, tgt_seq_length, tgt_seq_length]
 
         Returns
         -------
-        out: torch.Tensor [batch_size, seq_length, embed_dim]
+        out: torch.Tensor [batch_size, tgt_seq_length, embed_dim]
         """
+        # [batch_size, tgt_seq_length, embed_dim]
         self_attention_output = self.self_attention(x, x, x, tgt_mask)
         out = self.norm1(x + self.dropout(self_attention_output))
 
+        # [batch_size, tgt_seq_length, embed_dim]
         cross_attention_output = self.cross_attention(x, enc_output, enc_output, src_mask)
         out = self.norm2(out + self.dropout(cross_attention_output))
 
+        # [batch_size, tgt_seq_length, embed_dim] -> [batch_size, tgt_seq_length, d_ff] -> [batch_size, tgt_seq_length, embed_dim]
         feed_forward_output = self.feed_forward(out)
+
+        # [batch_size, tgt_seq_length, embed_dim]
         out = self.norm3(out + self.dropout(feed_forward_output))
         return out
