@@ -101,6 +101,15 @@ class VanillaTransformer(nn.Module):
         -------
         out: torch.Tensor [batch_size, tgt_seq_length, tgt_vocab_size]
         """
+
+        """
+        Let say
+        src = [[1, 2, 3, 0, 0],
+               [4, 5, 6, 7, 9]]
+        effective_lengths = [3, 5]
+        """
+        effective_lengths = (src != 0).sum(dim=1).tolist()
+
         # src_mask [batch_size, 1, 1, src_seq_length]
         # tgt_mask [batch_size, 1, tgt_seq_length, tgt_seq_length]
         src_mask, tgt_mask = self.generate_mask(src, tgt)
@@ -125,7 +134,7 @@ class VanillaTransformer(nn.Module):
         decode_output = tgt_embedding
         for decode_layer in self.decoder_layers:
             # [batch_size, tgt_seq_length, embed_dim]
-            decode_output = decode_layer(decode_output, encode_output, src_mask, tgt_mask)
+            decode_output = decode_layer(decode_output, encode_output, src_mask, tgt_mask, effective_lengths)
 
         # [batch_size, tgt_seq_length, embed_dim] -> [batch_size, tgt_seq_length, tgt_vocab_size]
         out = self.linear(decode_output)

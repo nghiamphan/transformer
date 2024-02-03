@@ -324,13 +324,14 @@ class DecoderBlock(nn.Module):
         self.norm3 = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout_rate)
 
-    def forward(self, x, enc_output, src_mask, tgt_mask):
+    def forward(self, x, enc_output, src_mask, tgt_mask, effective_lengths):
         """
         Arguments:
         x: torch.Tensor [batch_size, tgt_seq_length, embed_dim]
         enc_output: torch.Tensor [batch_size, src_seq_length, embed_dim]
         src_mask: torch.Tensor [batch_size, 1, 1, src_seq_length]
         tgt_mask: torch.Tensor [1, tgt_seq_length, tgt_seq_length]
+        effective_lengths: torch.Tensor [batch_size]
 
         Returns
         -------
@@ -348,7 +349,14 @@ class DecoderBlock(nn.Module):
         - the actual output generated so far is [5, 4]
         To generate the third 3 token for the model, by flipping enc_output, the decoder block will only pay attention to the last 3 tokens of the encoder's input in reverse order ([5, 4, 3]).
         """
-        enc_output = enc_output.flip([1])
+        flipped_enc_output = torch.zeros_like(enc_output)
+
+        for i, length in enumerate(effective_lengths):
+            flipped_enc_output[i, :length] = enc_output[i, :length].flip([0])
+            if length < enc_output.size(1):
+                flipped_enc_output[i, length:] = enc_output[i, length:]
+
+        enc_output = flipped_enc_output
 
         # [batch_size, tgt_seq_length, embed_dim]
         cross_attention_output = self.cross_attention(x, enc_output, enc_output, src_mask)
