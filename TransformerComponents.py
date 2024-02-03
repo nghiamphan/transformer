@@ -340,6 +340,16 @@ class DecoderBlock(nn.Module):
         self_attention_output = self.self_attention(x, x, x, tgt_mask)
         out = self.norm1(x + self.dropout(self_attention_output))
 
+        """
+        Flip the enc_output.
+        Let say
+        - encoder's input is [1, 2, 3, 4, 5]
+        - the current decoder's input is [10, 5, 4]
+        - the actual output generated so far is [5, 4]
+        To generate the third 3 token for the model, by flipping enc_output, the decoder block will only pay attention to the last 3 tokens of the encoder's input in reverse order ([5, 4, 3]).
+        """
+        enc_output = enc_output.flip([1])
+
         # [batch_size, tgt_seq_length, embed_dim]
         cross_attention_output = self.cross_attention(x, enc_output, enc_output, src_mask)
         out = self.norm2(out + self.dropout(cross_attention_output))
