@@ -255,7 +255,7 @@ Example: input = [1, 2, 3, 4, 5]
 
 ## Analysis & Improvement <a id="vanilla-improvement"></a>
 
-1.  We want to improve on the first point of the initial observation. The seemingly obvious idea is to reverse matrix K and V that are passed from the encoder to the cross-attention block of the decoder. This simple modification immediately improves the accuracy on sequences with 5 tokens to 100%.
+1.  <a id="vanilla-improvement-section-1"></a>We want to improve on the first point of the initial observation. The seemingly obvious idea is to reverse matrix K and V that are passed from the encoder to the cross-attention block of the decoder. This simple modification immediately improves the accuracy on sequences with 5 tokens to 100%.
 
     However...
 
@@ -263,7 +263,7 @@ Example: input = [1, 2, 3, 4, 5]
     For example: when input = [1, 2, 3, 0, 0], to generate the first token, the model will only pay attention to the paddng 0 at the end, and this information would not be enough.
     In fact, blindly reverse matrix K and V will never let the model achieve nearly 100% accuracy no matter how many layers we have.
 
-2.  So for the next idea, we reverse matrix K and V such that to generate the first token, the model will pay attention to the actual last token of the input and not the padding 0.
+2.  <a id="vanilla-improvement-section-2"></a>So for the next idea, we reverse matrix K and V such that to generate the first token, the model will pay attention to the actual last token of the input and not the padding 0.
     For example: if input = [1, 2, 3, 0, 0]:
 
     -   First iteration: pays attention to [3]
@@ -274,8 +274,8 @@ Example: input = [1, 2, 3, 4, 5]
 
     For reasons that still elude me, this version of reverse does NOT perform any better than the version without any reverse at all. It still, however, achieves nearly 100% accuracy with 4 layers.
 
-3.  The next idea we have is to remove padding 0s from the input before passing it to the forward propagation of the model.
-    For exampple, if input = [1, 2, 3, 0, 0]
+3.  <a id="vanilla-improvement-section-3"></a>The next idea we have is to remove padding 0s from the input before passing it to the forward propagation of the model.
+    For example, if input = [1, 2, 3, 0, 0]
 
     -   During training, encoder input = [1, 2, 3], decoder input = [10, 3, 2], model target = [3, 2, 1]
     -   During testing, encoder input = [1, 2, 3]. First iteration, decoder input = [10]. The model will run 3 iterations to generate the output.
@@ -284,7 +284,7 @@ Example: input = [1, 2, 3, 4, 5]
 
     One big drawback of this modification is that since the input lengths are now variable, we cannot do batch training and testing anymore. Thus it takes significantly longer to train and test the model.
 
-    Another important note about this model is that it seems to achieve best performance with 2 layers. Adding more layers than 2 will actually decrease its performance.
+    Another important note about this modification is that it seems to achieve the best performance with 2 layers. Adding more layers than 2 will actually decrease its performance.
 
 # Model Comparison
 
@@ -292,9 +292,9 @@ We will compare the performance of the following models:
 
 -   Encoder-only transformer
 -   Vanilla transformer with no modification
--   Vanilla transformer with simple reverse of matrix K and V, as described in section 1 of [Analysis & Improvement](#vanilla-improvement)
--   Vanilla transformer with reverse and modification 1, as described in section 2 of [Analysis & Improvement](#vanilla-improvement)
--   Vanilla transformer with reverse and modification 2, as described in section 3 of [Analysis & Improvement](#vanilla-improvement)
+-   Vanilla transformer with simple reverse of matrix K and V, as described in [section 1 of Analysis & Improvement](#vanilla-improvement-section-1)
+-   Vanilla transformer with reverse and modification 1, as described in [section 2 of Analysis & Improvement](#vanilla-improvement-section-2)
+-   Vanilla transformer with reverse and modification 2, as described in [section 3 of Analysis & Improvement](#vanilla-improvement-section-3)
 
 All the training and testing data are the same. All parameters of those models are kept the same as follows:
 
@@ -308,13 +308,13 @@ All the training and testing data are the same. All parameters of those models a
 
 The key metric is accuracy on sequence level of the above models with different numbers of layers.
 
-|            | Encoder-only |        | Vanilla             |               |               |
-| ---------- | ------------ | ------ | ------------------- | ------------- | ------------- |
-|            |              | No mod | Simple reverse      | Reverse mod 1 | Reverse mod 2 |
-| Git branch | main         | main   | vanilla-transformer | experiment-1  | experiment-2  |
-|            |              |        |                     |               |               |
-| 1 layer    | 7%           | 83%    | 95%                 | 83%           | 89%           |
-| 2 layers   | >99%         | >99%   | 97%                 | >99%          | >99.9%        |
-| 4 layers   | >99.9%       | >99.9% | 97%                 | >99.9%        | 98%           |
+|            | Encoder-only | Vanilla | Vanilla             | Vanilla       | Vanilla       |
+| ---------- | ------------ | ------- | ------------------- | ------------- | ------------- |
+| Variant    |              | No mod  | Simple reverse      | Reverse mod 1 | Reverse mod 2 |
+| Git branch | main         | main    | vanilla-transformer | experiment-1  | experiment-2  |
+|            |              |         |                     |               |               |
+| 1 layer    | 7%           | 83%     | 95%                 | 83%           | 89%           |
+| 2 layers   | >99%         | >99%    | 97%                 | >99%          | >99.9%        |
+| 4 layers   | >99.9%       | >99.9%  | 97%                 | >99.9%        | 98%           |
 
 Note: The only reason we explore model "reverse mod 1" and "reverse mod 2" is because the real inputs have variable lengths (not counting padding tokens). If all inputs have a fixed length, then the model "simple reverse" will achieve 100% accuracy with just one layer.
