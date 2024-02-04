@@ -1,14 +1,37 @@
 # Simple Transformer Implementation
 
-<b>Problem</b>: Implement a transformer to reverse a sequence of integers.
+## Table of Contents
+
+1. [Problem](#problem)
+2. [How to run](#how-to-run)
+3. [Encoder-only Transformer](#encoder-only-transformer)
+    1. [Data Generation](#data-generation)
+    2. [Transformer Architecture](#encoder-only-transformer-architecture)
+    3. [Model Training](#model-training)
+    4. [Model Evaluation](#model-evaluation)
+    5. [Model Tuning](#model-tuning)
+4. [Vanilla Transformer](#vanilla-transformer)
+    1. [Data Generation](#vanilla-data-generation)
+    2. [Transformer Architecture](#vanilla-transformer-architecture)
+    3. [Model Training](#vanilla-model-training)
+    4. [Model Evaluation](#vanilla-model-evaluation)
+        1. [Initial Observation](#initial-observation)
+    5. [Analysis & Improvement](#vanilla-improvement)
+5. [Model Comparison](#model-comparison)
+
+# Problem
+
+Implement a transformer to reverse a sequence of integers.
 
 For example: If the input sequence is [3, 5, 4, 2, 1], the transformer should return [1, 2, 4, 5, 3]
 
-## How to run
+# How to run
 
-Run the Jupyter notebook file <b>main.ipynb</b> (this is the encoder-only transformer).
+Run the Jupyter notebook file <b>main.ipynb</b> for the encoder-only transformer.
 
-Extra: Check <b>vanilla_main.ipynb</b> for a version of transformer with both encoder and decoder.
+Run <b>vanilla_main.ipynb</b> for a version of transformer with both encoder and decoder (aka vanilla transformer).
+
+# Encoder-only Transformer
 
 ## Data Generation
 
@@ -31,9 +54,16 @@ Each input sequence will be randomly generated given a specific length and consi
 If an input sequence and its target have length < <i>max_seq_length</i>, it will be padded with 0s at the end so that all inputs and outputs will have length = <i>max_seq_length</i>. <br>
 Duplicated input generations will also be dropped.
 
-## Transformer Architecture
+For the purpose of training and testing our models, we choose <i>max_seq_length = 5</i> and <i>vocab_size = 9</i> (actual vocabulary contains tokens from 1 to 9).
 
-![Alt text](<Encoder-only Transformer.png>)
+Example:
+
+-   input = [1, 2, 3, 4, 5], target = [5, 4, 3, 2, 1]
+-   input = [1, 2, 3, 0, 0], target = [3, 2, 1, 0, 0]
+
+## Encoder-only Transformer Architecture
+
+![alt text](<photos/Encoder-only Transformer.png>)
 
 The transformer has the following parameters:
 
@@ -99,7 +129,7 @@ The output after the positional encoding layer is the sum of the output of the e
 Each encoder block consists of four components: multihead attention layer, first normalization layer, feed forward layer, and second normalization layer. <br>
 Encoder block can be duplicated as specified by parameter <i>n_layers</i>.
 
-#### 4.1 Multihead Attention
+#### 4.1. Multihead Attention
 
 Purpose: the tokens within a sequence can have multiple relationships with each other at the same time. By using multihead attention, we try to capture those different relationships.
 
@@ -179,3 +209,112 @@ We use optuna and a validation dataset to tune the model for the following param
 -   apply_mask : [True, False]
 
 We observe that the most impactful parameters is the number of encoders (<i>n_layers</i>). When <i>n_layers = 1</i>, the accuracy on token level on the test dataset is about 66% after 20 training epochs. When <i>n_layers = 4</i>, the accuracy is over 99%.
+
+# Vanilla Transformer
+
+## Data Generation <a id="vanilla-data-generation"></a>
+
+We use the same data generation that we use for the encoder-only model, except that we also add a starting token at the beginning of the target sequence. The starting token equals to the largest number in the actual vocabulary + 1.
+
+Example: when <i>vocab_size = 9</i>, vocabulary contains tokens 1 to 9, starting token is 10.
+
+-   input = [1, 2, 3, 4, 5], target = [10, 5, 4, 3, 2, 1]
+-   input = [1, 2, 3, 0, 0], target = [10, 3, 2, 1, 0, 0]
+
+## Vanilla Transformer Architecture
+
+![alt text](<photos/Vanilla Transformer.png>)
+
+## Model Training <a id="vanilla-model-training"></a>
+
+Example:
+
+-   encoder input = [1, 2, 3, 4, 5], decoder input = [10, 5, 4, 3, 2], model target = [5, 4, 3, 2, 1]
+-   encoder input = [1, 2, 3, 0, 0], decoder input = [10, 3, 2, 1, 0], model target = [3, 2, 1, 0, 0]
+
+## Model Evaluation <a id="vanilla-model-evaluation"></a>
+
+In testing, output will be generated token by token. This is different from the encoder-only model, where the entire output sequence will be generated all at once.
+
+Example: input = [1, 2, 3, 4, 5]
+
+-   First iteration: encoder input = [1, 2, 3, 4, 5], decoder input = [10] -> output = [5]
+-   Second iteration: encoder input = [1, 2, 3, 4, 5], decoder input = [10, 5] -> output = [5, 4]
+-   ...
+-   The model continues generating each new token until output's length = input's length.
+
+### Initial Observation
+
+1. In the full model, there is a cross attention block within the decoder which takes matrix Q from the decoder itself but takes matrix K and V from the encoder. When Q is smaller in dimension than K (e.g.: encoder input is [1, 2, 3, 4, 5] but decoder input is [10, 5]), the product of Q and K (which is part of the equation for attention score) will have the smaller dimension of Q (that how pytorch’s implementation works, the extra portion in matrix K will simply be ignored).
+   In other words, for example, when we generate the second token for the output, it will only pay attention to the first 2 tokens of the encoder input (e.g.: [1, 2] in this case). It makes sense for a translation problem, but you would think that for this problem, the model should pay attention to the entire sequence of input at any iteration.
+
+2. Regardless of the previous point, the vanilla transformer performs way better when there are fewer layers.
+   When there is only one layer of encoder and/or decoder, the encoder-only model has accuracy of 7% on sequence level, vs. 83% for the vanilla model (trained and tested on the same data).
+
+3. Increasing the number of layers is the most important factor in improving performance in both models. When the number of layers = 4, the accuracy in both cases is close to 100%.
+
+## Analysis & Improvement <a id="vanilla-improvement"></a>
+
+1.  We want to improve on the first point of the initial observation. The seemingly obvious idea is to reverse matrix K and V that are passed from the encoder to the cross-attention block of the decoder. This simple modification immediately improves the accuracy on sequences with 5 tokens to 100%.
+
+    However...
+
+    In our data, for sequences with fewer than 5 tokens, we pad 0s at the end, and this modification does not work very well on those sequences.
+    For example: when input = [1, 2, 3, 0, 0], to generate the first token, the model will only pay attention to the paddng 0 at the end, and this information would not be enough.
+    In fact, blindly reverse matrix K and V will never let the model achieve nearly 100% accuracy no matter how many layers we have.
+
+2.  So for the next idea, we reverse matrix K and V such that to generate the first token, the model will pay attention to the actual last token of the input and not the padding 0.
+    For example: if input = [1, 2, 3, 0, 0]:
+
+    -   First iteration: pays attention to [3]
+    -   Second iteration: pays attention to [3, 2]
+    -   Third iteration: pays attention to [3, 2, 1]
+    -   Fourth iteration: pays attention to [3, 2, 1, 0 ]
+    -   Fifth iteration: pays attention to [3, 2, 1, 0, 0]
+
+    For reasons that still elude me, this version of reverse does NOT perform any better than the version without any reverse at all. It still, however, achieves nearly 100% accuracy with 4 layers.
+
+3.  The next idea we have is to remove padding 0s from the input before passing it to the forward propagation of the model.
+    For exampple, if input = [1, 2, 3, 0, 0]
+
+    -   During training, encoder input = [1, 2, 3], decoder input = [10, 3, 2], model target = [3, 2, 1]
+    -   During testing, encoder input = [1, 2, 3]. First iteration, decoder input = [10]. The model will run 3 iterations to generate the output.
+
+    As we already remove the padding 0s from input, simply reversing matrix K and V that are passed from the encoder to the cross-attention block of the decoder is enough.
+
+    One big drawback of this modification is that since the input lengths are now variable, we cannot do batch training and testing anymore. Thus it takes significantly longer to train and test the model.
+
+    Another important note about this model is that it seems to achieve best performance with 2 layers. Adding more layers than 2 will actually decrease its performance.
+
+# Model Comparison
+
+We will compare the performance of the following models:
+
+-   Encoder-only transformer
+-   Vanilla transformer with no modification
+-   Vanilla transformer with simple reverse of matrix K and V, as described in section 1 of [Analysis & Improvement](#vanilla-improvement)
+-   Vanilla transformer with reverse and modification 1, as described in section 2 of [Analysis & Improvement](#vanilla-improvement)
+-   Vanilla transformer with reverse and modification 2, as described in section 3 of [Analysis & Improvement](#vanilla-improvement)
+
+All the training and testing data are the same. All parameters of those models are kept the same as follows:
+
+-   actual vocab_size = 9 (tokens 1 to 9)
+-   embed_dim = 512
+-   max_seq_length = 5
+-   n_heads = 8
+-   d_ff = 2048
+-   dropout_rate = 0.1
+-   training epochs = 20
+
+The key metric is accuracy on sequence level of the above models with different numbers of layers.
+
+|            | Encoder-only |        | Vanilla             |               |               |
+| ---------- | ------------ | ------ | ------------------- | ------------- | ------------- |
+|            |              | No mod | Simple reverse      | Reverse mod 1 | Reverse mod 2 |
+| Git branch | main         | main   | vanilla-transformer | experiment-1  | experiment-2  |
+|            |              |        |                     |               |               |
+| 1 layer    | 7%           | 83%    | 95%                 | 83%           | 89%           |
+| 2 layers   | >99%         | >99%   | 97%                 | >99%          | >99.9%        |
+| 4 layers   | >99.9%       | >99.9% | 97%                 | >99.9%        | 98%           |
+
+Note: The only reason we explore model "reverse mod 1" and "reverse mod 2" is because the real inputs have variable lengths (not counting padding tokens). If all inputs have a fixed length, then the model "simple reverse" will achieve 100% accuracy with just one layer.
