@@ -155,8 +155,15 @@ class VanillaTransformer(nn.Module):
 
         for epoch in range(epochs):
             for batch_input, batch_target in train_data_loader:
-                batch_input = batch_input.to(self.device)
-                batch_target = batch_target.to(self.device)
+                # When batch_input.size(0) == 1 (batch size is 1), remove the padding tokens from the input and target tensors.
+                if batch_input.size(0) == 1:
+                    effective_lengths = (batch_input != 0).sum(dim=1).tolist()
+                    batch_input = batch_input[:, : effective_lengths[0]].to(self.device)
+                    batch_target = batch_target[:, : effective_lengths[0] + 1].to(self.device)
+                else:
+                    batch_input = batch_input.to(self.device)
+                    batch_target = batch_target.to(self.device)
+
                 batch_decoder_input = batch_target[:, :-1]
                 batch_real_target = batch_target[:, 1:]
 
@@ -173,19 +180,48 @@ class VanillaTransformer(nn.Module):
 
         return loss
 
-    def model_eval(self, input_test: torch.Tensor, target_test: torch.Tensor) -> tuple[torch.Tensor, float]:
+    def model_eval(
+        self,
+        input_test: torch.Tensor,
+        target_test: torch.Tensor,
+        batch_test: bool = True,
+    ) -> tuple[torch.Tensor, float]:
         """
         Arguments
         ---------
         input_test: torch.Tensor [batch_size, src_seq_length]
         target_test: torch.Tensor [batch_size, src_seq_length + 1, tgt_vocab_size]
+        batch_test: bool
 
         Returns
         -------
         out_test: torch.Tensor [batch_size, src_seq_length, tgt_vocab_size]
         cross_entropy_loss: float
         """
-        out_probs = self.generate_output(input_test)
+        if batch_test:
+            out_probs = self.generate_output(input_test)
+        else:
+            max_seq_length = input_test.size(1)
+
+            for i in range(input_test.size(0)):
+                input_without_padding = input_test[i][input_test[i] != 0]  # one dimensional tensor
+                temp_probs = self.generate_output(input_without_padding.unsqueeze(0))
+
+                # add padding tokens to the end of temp_probs if necessary
+                if temp_probs.size(1) < max_seq_length:
+                    padding_token_probs = torch.zeros(
+                        1,
+                        max_seq_length - temp_probs.size(1),
+                        self.tgt_vocab_size,
+                        device=self.device,
+                    )
+                    padding_token_probs[:, :, 0] = 1
+                    temp_probs = torch.cat((temp_probs, padding_token_probs), dim=1)
+
+                if i == 0:
+                    out_probs = temp_probs
+                else:
+                    out_probs = torch.cat((out_probs, temp_probs), dim=0)
 
         real_batch_target = target_test[:, 1:].to(self.device)
 
@@ -259,7 +295,7 @@ def objective(
     )
 
     model.model_training(train_data_loader, epochs, lr=1e-5)
-    cross_entropy_loss = model.model_eval(input_val, target_val)[1]
+    cross_entropy_loss = model.model_eval(input_val, target_val, batch_test=False)[1]
     return cross_entropy_loss
 
 
