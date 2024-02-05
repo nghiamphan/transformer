@@ -296,7 +296,7 @@ We will compare the performance of the following models:
 -   Vanilla transformer with reverse and modification 1, as described in [section 2 of Analysis & Improvement](#vanilla-improvement-section-2)
 -   Vanilla transformer with reverse and modification 2, as described in [section 3 of Analysis & Improvement](#vanilla-improvement-section-3)
 
-All the training and testing data are the same. All parameters of those models are kept the same as follows:
+All the training and testing data are the same. In the entire dataset, about 75% of the inputs have actual length = 5 and the rest have actual length < 5. All the parameters of those models are kept the same as follows:
 
 -   actual vocab_size = 9 (tokens 1 to 9)
 -   embed_dim = 512
@@ -317,4 +317,7 @@ The key metric is accuracy on sequence level of the above models with different 
 | 2 layers   | >99%         | >99%    | 97%                 | >99%          | >99.9%        |
 | 4 layers   | >99.9%       | >99.9%  | 97%                 | >99.9%        | 98%           |
 
-Note: The only reason we explore model "reverse mod 1" and "reverse mod 2" is because the real inputs have variable lengths (not counting padding tokens). If all inputs have a fixed length, then the model "simple reverse" will achieve 100% accuracy with just one layer.
+Final words:
+
+-   The only reason we explore model "reverse mod 1" and "reverse mod 2" is because the real inputs have variable lengths (not counting padding tokens). If all inputs have a fixed length, then the model "simple reverse" will achieve 100% accuracy with just one layer.
+-   For better or for worse, the "no mod" version seems to be "the best" model among all the variants of vanilla transformer when we consider both accuracy and computational demand.
